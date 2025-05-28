@@ -5,11 +5,10 @@ import os
 from sklearn.cluster import DBSCAN
 from ultralytics import YOLO
 
-# Load YOLOv8 detection model
-model = YOLO("yolov8n.pt")
+model = YOLO("yolo11n.pt")
 
 # Path to the image sequence folder
-sequence_path = "./../datasets/VisDrone2019-VID-dataset/sequences/uav0000020_00406_v"
+sequence_path = "./../datasets/VisDrone2019-VID-dataset-marked/uav0000355_00001_v"
 image_files = sorted(glob.glob(os.path.join(sequence_path, "*.jpg")))
 
 # Read the first frame and convert to grayscale
@@ -20,20 +19,21 @@ old_gray = cv2.cvtColor(old_frame, cv2.COLOR_BGR2GRAY)
 feature_params = dict(maxCorners=500, qualityLevel=0.05, minDistance=4, blockSize=9)
 
 # Detect initial feature points
-p0 = cv2.goodFeaturesToTrack(old_gray, mask=None, **feature_params)
+p0 = cv2.goodFeaturesToTrack(old_gray, mask=None, maxCorners=500, qualityLevel=0.05, minDistance=4, blockSize=9)
 
 # Parameters for Lucas-Kanade optical flow
 lk_params = dict(winSize=(9, 9), maxLevel=1, criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 100, 0.01))
 
 frame_count = 0
+paused = True  # Start with video paused
 
 for image_file in image_files[1:]:
+
     frame_count += 1
 
-    # Process only every 2th frame
-    if frame_count % 2 != 0:
-
-        continue
+    # Process only every 2nd frame
+    # if frame_count % 5 != 0:
+    #     continue
 
     frame = cv2.imread(image_file)
     frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -58,7 +58,7 @@ for image_file in image_files[1:]:
         
         # Filter small vectors (noise)
         motion_magnitudes = np.linalg.norm(motion_vectors, axis=1)
-        valid_indices = motion_magnitudes > 0.5
+        valid_indices = motion_magnitudes > 10
         filtered_points = good_new[valid_indices]
         
         if len(filtered_points) > 0:
@@ -82,7 +82,6 @@ for image_file in image_files[1:]:
                 # Store detected object
                 detected_objects.append((int(x_min), int(y_min), int(x_max), int(y_max)))
 
-            # Run YOLOv8 detection on the full frame
             yolo_results = model(frame)
 
             for result in yolo_results:
@@ -101,14 +100,20 @@ for image_file in image_files[1:]:
                                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
                             break  # Stop checking other clusters once matched
 
-        # Show the frame
-        cv2.imshow('Moving Object Detection & Classification', frame)
-        
-        # Update previous frame and points
-        old_gray = frame_gray.copy()
-        p0 = good_new.reshape(-1, 1, 2)
+    cv2.imshow('Moving Object Detection & Classification', frame)
     
-    if cv2.waitKey(30) & 0xFF == 27:
+    key = cv2.waitKey(30) & 0xFF
+
+    if key == ord('p'):
+        print("Paused. Press any key to continue...")
+        while True:
+            key2 = cv2.waitKey(0) & 0xFF
+            if key2 != 255:
+                print("Resuming...")
+                break
+
+    elif key == ord('q') or key == 27:
+        print("Stopping the program...")
         break
 
 cv2.destroyAllWindows()
